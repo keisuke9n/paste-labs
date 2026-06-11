@@ -69,6 +69,12 @@
   textarea{min-height:158px; resize:vertical; font-family:var(--mono); font-size:13px; line-height:1.55;
     font-variant-numeric:tabular-nums}
   .dob-row{display:flex; gap:8px}
+  select#seriesSel{width:100%; font:inherit; color:var(--ink); background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 11px; appearance:auto}
+  select#seriesSel:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  .detect{font-size:12.5px; color:var(--muted); background:var(--surface-2); border:1px solid var(--line-2);
+    border-radius:var(--radius-sm); padding:10px 12px; margin:0 0 14px}
+  .detect b{color:var(--ink); font-weight:680; font-variant-numeric:tabular-nums}
   .dob-row select{flex:1 1 0; min-width:0; font:inherit; color:var(--ink); background:var(--surface);
     border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 8px; appearance:auto;
     font-variant-numeric:tabular-nums}
@@ -214,11 +220,11 @@
 
     <div style="margin-top:18px">
       <div class="ta-row">
-        <label for="labtext" style="margin:0">検査値テキスト <span class="req">*</span></label>
+        <label for="labtext" style="margin:0">検査データ <span class="req">*</span></label>
         <button type="button" class="linklike" id="sampleBtn">サンプルを入力</button>
       </div>
-      <textarea id="labtext" spellcheck="false" placeholder="検査日ごとに、日付と eGFR または Cr を貼り付け&#10;&#10;2025/01/15&#10;eGFR 56.3&#10;&#10;2025/04/20&#10;Cr 1.15&#10;…"></textarea>
-      <p class="hint" style="margin:8px 0 0">日付と同じ行・直後の行にある eGFR / Cr を拾います。対応ラベル — eGFR系：<code class="k">eGFR / EGFR / e-GFR / eGFRcre</code>　Cr系：<code class="k">Cr / CRE / Cre / CREA / Creatinine</code>。<strong>eGFRが記載されている場合はその値を優先採用し、Crからの再計算は行いません。</strong>抽出結果は次の画面で必ず確認・修正できます。</p>
+      <textarea id="labtext" spellcheck="false" placeholder="電子カルテの時系列データ（スペース区切り・タブ区切り・CSV）／または「日付＋値」の縦並びを貼り付け&#10;&#10;採取日       2018/07/26   2018/08/17   …&#10;CRE         0.81         0.86         …"></textarea>
+      <p class="hint" style="margin:8px 0 0">日付の行（または列）と数値の対応を抽出します。転置テーブル（行＝項目／列＝採取日、スペース・タブ・CSV）と、「日付→値」の縦並びの両方に対応。抽出後に<strong>解析する項目と、その値が Cr か eGFR か</strong>を選び、確認画面で対応を必ず検証できます。<code class="k">検査中止</code> や空欄の列は自動でスキップします。</p>
     </div>
 
     <div class="actions">
@@ -229,20 +235,38 @@
 
   <!-- ===== STEP 2: confirm ===== -->
   <section class="card hidden" id="s-confirm">
-    <div class="sect-head"><span class="step">STEP 2</span><h2>抽出結果の確認</h2></div>
-    <p class="hint">解析の前に必ず内容を確認してください。日付・eGFR値の編集、行の削除ができます。確認後に解析が実行されます。</p>
+    <div class="sect-head"><span class="step">STEP 2</span><h2>項目の選択と確認</h2></div>
+    <p class="hint">抽出した日付に対して、解析する項目（系列）と、その値が Cr か eGFR かを選びます。解析の前に必ず対応を確認してください（編集・削除可）。</p>
 
-    <div class="tbl-scroll">
+    <div id="detectSummary" class="detect"></div>
+
+    <div class="grid2" style="margin-bottom:4px">
+      <div>
+        <label for="seriesSel">解析する項目</label>
+        <select id="seriesSel"></select>
+      </div>
+      <div>
+        <label>値の種類</label>
+        <div class="seg" id="typeSel" role="group" aria-label="値の種類">
+          <button type="button" data-type="cr" aria-pressed="false">Cr（eGFRを計算）</button>
+          <button type="button" data-type="egfr" aria-pressed="false">eGFR（そのまま）</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="alignWarn" class="notice bad hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <span id="alignWarnMsg"></span>
+    </div>
+
+    <div class="tbl-scroll" style="margin-top:12px">
       <table id="extractTable">
-        <thead><tr><th>日付</th><th style="text-align:right">eGFR</th><th>Cr</th><th>ソース</th><th></th></tr></thead>
+        <thead><tr><th>日付</th><th id="valHead">値</th><th id="egfrHead">eGFR</th><th>ソース</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
 
-    <div id="mixWarn" class="notice warn hidden">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-      <span><strong>報告値と計算値が混在しています。</strong>検査方法や推算式の違いが解釈に影響する可能性があります。</span>
-    </div>
+    <div id="dupNote"></div>
     <div id="eligNote"></div>
 
     <div class="actions">
@@ -335,47 +359,99 @@ function lineHasDate(l){
 }
 const EGFR_RE=/e-?gfr(?:cre)?\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/i;
 const CR_RE=/\b(?:creatinine|crea|cre|cr)\b\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/i;
-function extractEgfr(l){const m=l.match(EGFR_RE);return m?parseFloat(m[1]):null;}
-function extractCr(l){const m=l.replace(EGFR_RE,' ').match(CR_RE);return m?parseFloat(m[1]):null;}
 function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmtDate(d){return dateKey(d);}
-function parseLabText(text){
+
+/* ---- cell splitting (tab / CSV / multi-space) ---- */
+function stripQuote(s){s=String(s).trim();if(s.length>=2&&s[0]==='"'&&s[s.length-1]==='"')s=s.slice(1,-1).replace(/""/g,'"');return s.trim();}
+function parseCsvLine(line){const out=[];let cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(q){if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=c;}else{if(c==='"')q=true;else if(c===','){out.push(cur);cur='';}else cur+=c;}}out.push(cur);return out.map(s=>s.trim());}
+function splitCells(line){
+  if(line.indexOf('\t')>=0)return line.split('\t').map(stripQuote);
+  if(line.indexOf('","')>=0||/^\s*"/.test(line))return parseCsvLine(line);
+  return line.trim().split(/[ \u3000\t]{2,}/).map(stripQuote);
+}
+function isNumericValue(s){s=String(s).trim();if(!s)return false;if(/[:：]/.test(s))return false;return /^-?\d+(?:\.\d+)?$/.test(s);}
+
+/* ---- type guess ---- */
+function guessType(label,values){
+  if(/e-?gfr/i.test(label))return'egfr';
+  if(/cre|creat|ｸﾚｱﾁﾆﾝ|クレアチニン|\bcr\b/i.test(label))return'cr';
+  const nums=values.filter(isNumericValue).map(parseFloat).sort((a,b)=>a-b);
+  if(!nums.length)return'cr';
+  return nums[Math.floor(nums.length/2)]<20?'cr':'egfr';
+}
+
+/* ---- transposed table parser (rows=items, cols=dates) ---- */
+function parseTransposed(text){
+  const rows=String(text||'').split(/\r?\n/)
+    .filter(l=>l.trim()&&!/^\s*\[.*\]\s*$/.test(l))
+    .map(splitCells).filter(r=>r.length>=2);
+  let di=-1;
+  for(let i=0;i<rows.length;i++){if(rows[i].slice(1).filter(c=>parseDate(c)).length>=2){di=i;break;}}
+  if(di<0)return null;
+  const dateCells=rows[di].slice(1);
+  const dates=dateCells.map(c=>{const d=parseDate(c);return d?{date:d,key:dateKey(d)}:null;});
+  const N=dates.length, series=[];
+  rows.forEach((r,i)=>{
+    if(i===di)return;
+    const label=r[0]||('系列'+i), raw=r.slice(1), values=[];
+    for(let j=0;j<N;j++)values.push(j<raw.length?raw[j]:'');
+    const numericCount=values.filter(isNumericValue).length;
+    if(numericCount>0)series.push({label,values,numericCount,rawLen:raw.length});
+  });
+  if(!series.length)return null;
+  return {mode:'transposed',dates,series,dateLen:N};
+}
+
+/* ---- vertical parser (date block then labelled values) ---- */
+function parseVertical(text){
   const lines=String(text||'').split(/\r?\n/);
-  const map=new Map(); let cur=null;
+  const slots=[],egfr=[],cr=[]; let cur=-1;
   for(const raw of lines){
     const line=raw.trim(); if(!line)continue;
-    if(lineHasDate(line)){const d=parseDate(line);
-      if(d){const k=dateKey(d); if(!map.has(k))map.set(k,{date:d,dateStr:fmtDate(d),egfr:null,cr:null}); cur=map.get(k);}}
-    const eg=extractEgfr(line), cr=extractCr(line);
-    if((eg!==null||cr!==null)&&cur){
-      if(eg!==null&&cur.egfr===null)cur.egfr=eg;
-      if(cr!==null&&cur.cr===null)cur.cr=cr;
-    }
+    if(lineHasDate(line)){const d=parseDate((line.match(/\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}/)||[line])[0])||parseDate(line);
+      if(d){slots.push({date:d,key:dateKey(d)});cur=slots.length-1;egfr[cur]=null;cr[cur]=null;}}
+    if(cur<0)continue;
+    const eg=(line.match(EGFR_RE)||[])[1];
+    const c=(line.replace(EGFR_RE,' ').match(CR_RE)||[])[1];
+    if(eg!=null&&egfr[cur]==null)egfr[cur]=parseFloat(eg);
+    if(c!=null&&cr[cur]==null)cr[cur]=parseFloat(c);
   }
-  return Array.from(map.values()).sort((a,b)=>a.date-b.date);
+  if(!slots.length)return null;
+  const series=[];
+  if(egfr.some(v=>v!=null))series.push({label:'eGFR',values:egfr.map(v=>v==null?'':String(v)),numericCount:egfr.filter(v=>v!=null).length});
+  if(cr.some(v=>v!=null))series.push({label:'Cr',values:cr.map(v=>v==null?'':String(v)),numericCount:cr.filter(v=>v!=null).length});
+  if(!series.length)return null;
+  return {mode:'vertical',dates:slots,series,dateLen:slots.length};
 }
+function extractData(text){return parseTransposed(text)||parseVertical(text);}
+
 function ageAt(dob,m){let a=m.getFullYear()-dob.getFullYear();
   const md=m.getMonth()-dob.getMonth();
   if(md<0||(md===0&&m.getDate()<dob.getDate()))a--; return a;}
 function calcEgfr(cr,age,sex){let v=194*Math.pow(cr,-1.094)*Math.pow(age,-0.287); if(sex==='female')v*=0.739; return v;}
 function validateCr(c){return c>=0.1&&c<=20.0;}
 function validateEgfr(e){return e>=1&&e<=200;}
-function buildMeasurements(raws,p){
+
+/* ---- build measurements from a chosen series + type (index-aligned) ---- */
+function buildFromSeries(dates,series,type,patient){
   const out=[];
-  for(const r of raws){
-    const age=ageAt(p.dob,r.date);
-    let egfr=null,source=null,note=null;
-    if(r.egfr!==null){egfr=r.egfr;source='reported';}
-    else if(r.cr!==null){
-      if(!validateCr(r.cr))note='Cr値が範囲外';
+  dates.forEach((slot,i)=>{
+    if(!slot)return;                       // unparseable date column -> skip (keeps alignment)
+    const raw=series.values[i];
+    if(!isNumericValue(raw))return;        // 検査中止 / blank -> skip this column only
+    const num=parseFloat(raw), age=ageAt(patient.dob,slot.date);
+    let egfr=null,source=null,note=null,cr=null;
+    if(type==='egfr'){egfr=num;source='reported';if(!validateEgfr(egfr))note='eGFRが範囲外';}
+    else{cr=num;
+      if(!validateCr(cr))note='Cr値が範囲外';
       else if(age<18)note='18歳未満';
-      else{egfr=calcEgfr(r.cr,age,p.sex);source='calculated';}
-    } else note='値なし';
-    if(egfr!==null&&!validateEgfr(egfr)){note='eGFRが範囲外';}
-    const valid=egfr!==null&&validateEgfr(egfr);
-    out.push({date:r.date,dateStr:r.dateStr,age,cr:r.cr,
-      egfr:egfr===null?null:Math.round(egfr*10)/10,source,note,valid});
-  }
+      else{egfr=calcEgfr(cr,age,patient.sex);source='calculated';if(!validateEgfr(egfr))note='eGFRが範囲外';}
+    }
+    out.push({date:slot.date,dateStr:slot.key,age,cr,
+      egfr:egfr==null?null:Math.round(egfr*10)/10,source,note,
+      valid:egfr!=null&&validateEgfr(egfr)});
+  });
   return out;
 }
 function linearRegression(pts){
@@ -394,7 +470,7 @@ const DAY=86400000;
 
 /* ===================== app state ===================== */
 const $=s=>document.querySelector(s);
-let state={sex:null, dob:null, measurements:[], regression:null};
+let state={sex:null, dob:null, extracted:null, selIdx:0, type:'cr', measurements:[], regression:null};
 
 /* ---- populate 生年月日 selects ---- */
 (function initDob(){
@@ -425,24 +501,17 @@ $('#sex').addEventListener('click',e=>{
   $('#sex').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b));
 });
 $('#sampleBtn').addEventListener('click',()=>{
+  const D=["2018/07/26","2018/08/17","2019/02/15","2019/02/19","2019/06/10","2020/01/30","2020/06/23","2020/06/23","2020/07/01","2021/01/26","2021/04/27","2021/10/28","2022/01/11","2022/04/26","2022/12/16","2023/06/29","2023/12/26","2024/08/05","2025/03/03","2025/05/26","2026/03/16"];
+  const CRE=["0.81","0.86","検査中止","0.83","0.78","0.78","0.82","0.83","0.90","0.83","0.88","0.77","0.77","0.84","0.89","0.88","0.88","0.84","0.78","0.93","0.83"];
+  const C=["定期検査","","定期検査","定期検査","定期検査","定期検査","定期検査","","","定期検査","定期検査","定期検査","","定期検査","定期検査","定期検査","定期検査","定期検査","定期検査","","定期検査"];
   $('#labtext').value=
-`2024/02/10
-eGFR 60.4
-
-2024/06/18
-eGFR 58.9
-Cr 1.05
-
-2024/11/05
-Cr 1.06
-
-2025/03/22
-eGFR 55.8
-
-2025/09/14
-eGFR 53.6`;
+    "[検査結果データ]\n"+
+    "採取日\t"+D.join("\t")+"\n"+
+    "採取時間\t"+D.map(()=>"00:00").join("\t")+"\n"+
+    "依頼コメント\t"+C.join("\t")+"\n"+
+    "CRE (ｸﾚｱﾁﾆﾝ)\t"+CRE.join("\t");
   if(!state.sex){state.sex='male';$('#sex').querySelector('[data-sex=male]').setAttribute('aria-pressed','true');}
-  if(!getDob()) setDob(1958,4,12);
+  if(!getDob()) setDob(1965,5,20);
 });
 
 function showError(el,msg){
@@ -460,27 +529,82 @@ $('#extractBtn').addEventListener('click',()=>{
   if(dob > new Date()){showError($('#inputError'),'生年月日が未来の日付になっています。');return;}
   state.dob=dob;
   const txt=$('#labtext').value;
-  if(!txt.trim()){showError($('#inputError'),'検査値テキストを入力してください。');return;}
-  const raws=parseLabText(txt);
-  if(raws.length===0){showError($('#inputError'),'日付付きの検査値を抽出できませんでした。日付（例：2025/01/15）と eGFR または Cr の値が含まれているか確認してください。');return;}
-  state.measurements=buildMeasurements(raws,{sex:state.sex,dob:state.dob});
-  renderTable();
+  if(!txt.trim()){showError($('#inputError'),'検査データを入力してください。');return;}
+  const ex=extractData(txt);
+  if(!ex){showError($('#inputError'),'日付と数値の対応を抽出できませんでした。日付の行（または列）と数値が含まれているかご確認ください。');return;}
+  state.extracted=ex;
+  renderDetect();
+  populateSeries();
+  rebuild();
   $('#s-confirm').classList.remove('hidden');
   $('#results').classList.add('hidden');
   $('#s-confirm').scrollIntoView({behavior:'smooth',block:'start'});
 });
 
+/* ---- step 2: series/type selection ---- */
+function renderDetect(){
+  const ds=state.extracted.dates.filter(Boolean).map(d=>d.date).sort((a,b)=>a-b);
+  const n=ds.length;
+  const modeLabel=state.extracted.mode==='transposed'?'転置テーブル':'縦型リスト';
+  const range=n?`<b>${fmtDate(ds[0])}</b> 〜 <b>${fmtDate(ds[n-1])}</b>`:'—';
+  $('#detectSummary').innerHTML=`形式：<b>${modeLabel}</b>　／　検出した検査日：<b>${n}</b> 件（${range}）　／　候補項目：<b>${state.extracted.series.length}</b>`;
+}
+function populateSeries(){
+  const sel=$('#seriesSel'); sel.innerHTML='';
+  state.extracted.series.forEach((s,i)=>sel.add(new Option(`${s.label}　（数値 ${s.numericCount} 件）`, i)));
+  let best=0; state.extracted.series.forEach((s,i)=>{if(s.numericCount>state.extracted.series[best].numericCount)best=i;});
+  state.selIdx=best; sel.value=best;
+  const s=state.extracted.series[best];
+  state.type=guessType(s.label,s.values);
+  setTypeButtons();
+}
+function setTypeButtons(){ $('#typeSel').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.type===state.type)); }
+function updateAlignWarn(){
+  const ex=state.extracted, s=ex.series[state.selIdx]; let msg='';
+  if(ex.mode==='transposed' && s.rawLen!=null && s.rawLen!==ex.dateLen){
+    msg=`「${s.label}」の値の数（${s.rawLen}）が検査日の数（${ex.dateLen}）と一致していません。日付と値の対応がずれている可能性があります。下の表で必ず確認するか、CSV形式での貼り付けをお試しください。`;
+  }
+  $('#alignWarn').classList.toggle('hidden',!msg);
+  if(msg)$('#alignWarnMsg').textContent=msg;
+}
+function rebuild(){
+  const s=state.extracted.series[state.selIdx];
+  state.measurements=buildFromSeries(state.extracted.dates,s,state.type,{sex:state.sex,dob:state.dob});
+  state.measurements.forEach(m=>{ m.egfrInput=(state.type==='egfr')?m.egfr:null; });
+  $('#valHead').textContent = state.type==='cr'?'Cr':'eGFR';
+  $('#egfrHead').textContent = state.type==='cr'?'eGFR（計算）':'eGFR（使用）';
+  updateAlignWarn();
+  renderTable();
+}
+$('#seriesSel').addEventListener('change',e=>{
+  state.selIdx=+e.target.value;
+  const s=state.extracted.series[state.selIdx];
+  state.type=guessType(s.label,s.values); setTypeButtons(); rebuild();
+});
+$('#typeSel').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-type]'); if(!b)return;
+  state.type=b.dataset.type; setTypeButtons(); rebuild();
+});
+
 /* ---- step 2: editable table ---- */
 function recompute(){
-  // re-derive source/validity for edited rows from current dateStr + egfr
+  const type=state.type, sex=state.sex;
   state.measurements.forEach(m=>{
-    const d=parseDate(m.dateStr);
-    m.dateValid=!!d;
-    if(d){m.date=d; m.age=ageAt(state.dob,d);}
-    if(m.egfr===null||isNaN(m.egfr)){m.valid=false;m.note='値なし';}
-    else if(!validateEgfr(m.egfr)){m.valid=false;m.note='eGFRが範囲外';}
-    else if(!d){m.valid=false;m.note='日付が不正';}
-    else {m.valid=true;m.note=null;}
+    const d=parseDate(m.dateStr); if(d){m.date=d;m.age=ageAt(state.dob,d);}
+    let egfr=null,note=null;
+    if(!d){note='日付が不正';}
+    else if(type==='cr'){
+      if(m.cr==null||isNaN(m.cr))note='値なし';
+      else if(!validateCr(m.cr))note='Cr値が範囲外';
+      else if(m.age<18)note='18歳未満';
+      else{egfr=Math.round(calcEgfr(m.cr,m.age,sex)*10)/10; if(!validateEgfr(egfr)){egfr=null;note='eGFRが範囲外';}}
+    } else {
+      if(m.egfrInput==null||isNaN(m.egfrInput))note='値なし';
+      else if(!validateEgfr(m.egfrInput))note='eGFRが範囲外';
+      else egfr=m.egfrInput;
+    }
+    m.egfr=egfr; m.valid=(egfr!=null); m.note=m.valid?null:note;
+    m.source=type==='egfr'?'reported':'calculated';
   });
 }
 function renderTable(){
@@ -489,32 +613,27 @@ function renderTable(){
   state.measurements.forEach((m,i)=>{
     const tr=document.createElement('tr');
     if(!m.valid)tr.className='invalid';
-    const srcCls=m.source==='reported'?'reported':m.source==='edited'?'edited':'calculated';
-    const srcTxt=m.source==='reported'?'報告eGFR':m.source==='edited'?'手動編集':m.source==='calculated'?'Crから計算':'—';
+    const valShown = state.type==='cr' ? (m.cr??'') : (m.egfrInput??'');
+    const srcCls=m.source==='reported'?'reported':'calculated';
+    const srcTxt=m.source==='reported'?'報告eGFR':'Crから計算';
     tr.innerHTML=
       `<td><input class="cell-date" value="${m.dateStr}" data-i="${i}" data-f="date" inputmode="numeric"></td>`+
-      `<td style="text-align:right"><input class="num cell-egfr" value="${m.egfr??''}" data-i="${i}" data-f="egfr" inputmode="decimal"></td>`+
-      `<td class="cr-cell">${m.cr??'—'}</td>`+
+      `<td style="text-align:right"><input class="num cell-egfr" value="${valShown}" data-i="${i}" data-f="value" inputmode="decimal"></td>`+
+      `<td class="cr-cell calc-cell" style="text-align:right">${m.egfr??'—'}</td>`+
       `<td><span class="src ${srcCls}">${srcTxt}</span>${m.note?`<div class="rownote">${m.note}</div>`:''}</td>`+
       `<td style="text-align:right"><button class="delbtn" data-del="${i}" aria-label="削除"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td>`;
     tb.appendChild(tr);
   });
-  // mixed source
-  const hasRep=state.measurements.some(m=>m.source==='reported');
-  const hasCalc=state.measurements.some(m=>m.source==='calculated');
-  $('#mixWarn').classList.toggle('hidden',!(hasRep&&hasCalc));
   checkEligibility();
 }
 $('#extractTable').addEventListener('input',e=>{
   const inp=e.target.closest('input[data-i]'); if(!inp)return;
-  const i=+inp.dataset.i, f=inp.dataset.f;
-  if(f==='date'){state.measurements[i].dateStr=inp.value.trim();}
-  if(f==='egfr'){
-    const v=parseFloat(inp.value);
-    state.measurements[i].egfr=isNaN(v)?null:v;
-    state.measurements[i].source='edited';
+  const i=+inp.dataset.i, f=inp.dataset.f, m=state.measurements[i];
+  if(f==='date'){m.dateStr=inp.value.trim();}
+  if(f==='value'){
+    const v=parseFloat(inp.value); const nv=isNaN(v)?null:v;
+    if(state.type==='cr')m.cr=nv; else m.egfrInput=nv;
   }
-  // light recompute without full re-render (avoid losing focus); update eligibility + warnings
   recompute();
   refreshRowStates();
 });
@@ -523,15 +642,13 @@ function refreshRowStates(){
   state.measurements.forEach((m,i)=>{
     const tr=rows[i]; if(!tr)return;
     tr.classList.toggle('invalid',!m.valid);
-    const noteEl=tr.querySelector('.rownote');
+    const calc=tr.querySelector('.calc-cell'); if(calc)calc.textContent=m.egfr??'—';
     const srcSpan=tr.querySelector('.src');
-    if(srcSpan && m.source==='edited'){srcSpan.className='src edited';srcSpan.textContent='手動編集';}
-    if(m.note){if(noteEl)noteEl.textContent=m.note; else {const d=document.createElement('div');d.className='rownote';d.textContent=m.note;srcSpan.after(d);}}
+    if(srcSpan){const cls=m.source==='reported'?'reported':'calculated';srcSpan.className='src '+cls;srcSpan.textContent=m.source==='reported'?'報告eGFR':'Crから計算';}
+    let noteEl=tr.querySelector('.rownote');
+    if(m.note){if(noteEl)noteEl.textContent=m.note;else{const d=document.createElement('div');d.className='rownote';d.textContent=m.note;srcSpan.parentNode.appendChild(d);}}
     else if(noteEl)noteEl.remove();
   });
-  const hasRep=state.measurements.some(m=>m.source==='reported');
-  const hasCalc=state.measurements.some(m=>m.source==='calculated');
-  $('#mixWarn').classList.toggle('hidden',!(hasRep&&hasCalc));
   checkEligibility();
 }
 $('#extractTable').addEventListener('click',e=>{
@@ -542,20 +659,14 @@ $('#extractTable').addEventListener('click',e=>{
 
 function validMeasurements(){return state.measurements.filter(m=>m.valid).slice().sort((a,b)=>a.date-b.date);}
 function checkEligibility(){
-  const v=validMeasurements();
-  const n=v.length;
-  let span=0;
-  if(n>=2)span=Math.round((v[n-1].date-v[0].date)/DAY);
-  // duplicate dates among valid rows
-  const keys=v.map(m=>dateKey(m.date));
-  const dup=keys.length!==new Set(keys).size;
-  const eligible=n>=5 && span>=365 && !dup;
-  let msg='';
-  if(dup) msg='重複した日付があります。重複を解消してください。';
-  else if(n<5||span<365) msg='傾きの算出には、1年以上にわたる5件以上の有効な測定が必要です。'+`（現在：有効 ${n} 件 / 期間 ${span} 日）`;
-  $('#eligNote').innerHTML = msg
-    ? `<div class="notice bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>${msg}</span></div>`
-    : '';
+  const v=validMeasurements(), n=v.length;
+  let span=0; if(n>=2)span=Math.round((v[n-1].date-v[0].date)/DAY);
+  const keys=v.map(m=>dateKey(m.date)); const dup=keys.length!==new Set(keys).size;
+  $('#dupNote').innerHTML = dup
+    ? `<div class="notice warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg><span>同一日付の測定が含まれています。そのまま解析できますが、必要なら重複行を削除してください。</span></div>` : '';
+  const eligible=n>=5 && span>=365;
+  $('#eligNote').innerHTML = (!eligible)
+    ? `<div class="notice bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>傾きの算出には、1年以上にわたる5件以上の有効な測定が必要です。（現在：有効 ${n} 件 / 期間 ${span} 日）</span></div>` : '';
   $('#analyzeBtn').disabled=!eligible;
   return eligible;
 }
