@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eGFR Slope Analyzer</title>
+<style>
+  :root{
+    --bg:#EBF0F1; --surface:#FFFFFF; --surface-2:#F6FAFB;
+    --ink:#13252D; --muted:#5E727B; --faint:#8497A0;
+    --line:#D7E1E4; --line-2:#E7EEF0;
+    --accent:#0E7C86; --accent-ink:#0A5A62; --accent-soft:#E2F1F2;
+    --stable:#157A3B; --stable-bg:#E9F7EF;
+    --decline:#A8580A; --decline-bg:#FBF1E1;
+    --rapid:#BC2A22; --rapid-bg:#FAEAE9;
+    --warn:#9A6B00; --warn-bg:#FCF4E0;
+    --radius:14px; --radius-sm:9px;
+    --shadow:0 1px 2px rgba(19,37,45,.05), 0 8px 24px -12px rgba(19,37,45,.14);
+    --mono:"SFMono-Regular",ui-monospace,"Menlo",monospace;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:0 18px 80px}
+
+  /* header */
+  header.top{padding:30px 0 18px}
+  .brand{display:flex; align-items:center; gap:11px}
+  .glyph{width:34px; height:34px; flex:0 0 auto}
+  h1{font-size:22px; letter-spacing:-.01em; margin:0; font-weight:680}
+  .sub{color:var(--muted); font-size:13px; margin:6px 0 0; max-width:60ch}
+  .ribbon{height:3px; margin:16px 0 0;
+    background:linear-gradient(100deg,var(--accent) 0%, var(--accent) 38%, transparent 38%);}
+  .localbadge{display:inline-flex; align-items:center; gap:6px; margin-top:14px;
+    font-size:11.5px; font-weight:600; color:var(--accent-ink);
+    background:var(--accent-soft); padding:4px 10px; border-radius:999px;}
+  .localbadge svg{width:12px;height:12px}
+
+  /* cards & sections */
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:22px; margin-top:18px}
+  .sect-head{display:flex; align-items:baseline; gap:10px; margin:0 0 4px}
+  .step{font:600 11px/1 var(--mono); color:var(--accent); letter-spacing:.12em;
+    border:1px solid var(--accent); border-radius:5px; padding:4px 6px}
+  h2{font-size:15.5px; margin:0; font-weight:660; letter-spacing:-.005em}
+  .hint{color:var(--muted); font-size:12.5px; margin:3px 0 16px}
+
+  label{display:block; font-size:12.5px; font-weight:600; color:var(--ink); margin:0 0 6px}
+  .req{color:var(--rapid); font-weight:700}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:var(--surface-2)}
+  .seg button{appearance:none; border:0; background:transparent; cursor:pointer;
+    font:inherit; font-size:13px; font-weight:600; color:var(--muted);
+    padding:9px 20px; min-width:84px}
+  .seg button[aria-pressed="true"]{background:var(--accent); color:#fff}
+  .seg button:focus-visible{outline:2px solid var(--accent-ink); outline-offset:-2px}
+
+  input[type=date], input[type=text], input.num, textarea{
+    width:100%; font:inherit; color:var(--ink); background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 11px}
+  input:focus, textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  textarea{min-height:158px; resize:vertical; font-family:var(--mono); font-size:13px; line-height:1.55;
+    font-variant-numeric:tabular-nums}
+  .dob-row{display:flex; gap:8px}
+  .dob-row select{flex:1 1 0; min-width:0; font:inherit; color:var(--ink); background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--radius-sm); padding:9px 8px; appearance:auto;
+    font-variant-numeric:tabular-nums}
+  .dob-row select#dob-y{flex:1.4 1 0}
+  .dob-row select:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  .ta-row{display:flex; justify-content:space-between; align-items:center; margin:0 0 6px}
+  .linklike{background:none; border:0; color:var(--accent); font:inherit; font-size:12.5px;
+    font-weight:600; cursor:pointer; padding:0}
+  .linklike:hover{text-decoration:underline}
+
+  .btn{appearance:none; cursor:pointer; font:inherit; font-weight:650; font-size:14px;
+    border-radius:var(--radius-sm); border:1px solid transparent; padding:11px 18px;
+    display:inline-flex; align-items:center; gap:8px; transition:background .12s,opacity .12s}
+  .btn-primary{background:var(--accent); color:#fff}
+  .btn-primary:hover{background:var(--accent-ink)}
+  .btn-primary:disabled{background:#B9CACE; cursor:not-allowed}
+  .btn-ghost{background:var(--surface); color:var(--ink); border-color:var(--line)}
+  .btn-ghost:hover{background:var(--surface-2)}
+  .btn:focus-visible{outline:2px solid var(--accent-ink); outline-offset:2px}
+  .actions{margin-top:18px; display:flex; gap:10px; flex-wrap:wrap}
+
+  .hidden{display:none !important}
+
+  /* extraction table */
+  .tbl-scroll{overflow-x:auto; margin-top:4px; border:1px solid var(--line-2); border-radius:var(--radius-sm)}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  thead th{font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--faint);
+    font-weight:700; text-align:left; padding:10px 12px; background:var(--surface-2); border-bottom:1px solid var(--line-2)}
+  tbody td{padding:8px 10px; border-bottom:1px solid var(--line-2); vertical-align:middle}
+  tbody tr:last-child td{border-bottom:0}
+  tr.invalid{background:var(--rapid-bg)}
+  td input{padding:6px 8px; font-size:13px}
+  td input.cell-date{width:130px; font-family:var(--mono)}
+  td input.cell-egfr{width:78px; text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums}
+  td.cr-cell{font-family:var(--mono); color:var(--muted)}
+  .src{font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap}
+  .src.reported{background:var(--accent-soft); color:var(--accent-ink)}
+  .src.calculated{background:#EEF1F2; color:var(--muted)}
+  .src.edited{background:var(--warn-bg); color:var(--warn)}
+  .delbtn{appearance:none;border:0;background:transparent;cursor:pointer;color:var(--faint);
+    border-radius:6px; padding:5px; line-height:0}
+  .delbtn:hover{color:var(--rapid); background:var(--rapid-bg)}
+  .rownote{font-size:11px; color:var(--rapid); font-weight:600}
+
+  .notice{display:flex; gap:10px; padding:12px 14px; border-radius:var(--radius-sm); font-size:12.5px; margin-top:14px}
+  .notice svg{flex:0 0 auto; width:16px; height:16px; margin-top:1px}
+  .notice.warn{background:var(--warn-bg); color:#6e4d00; border:1px solid #EAD49A}
+  .notice.bad{background:var(--rapid-bg); color:#7c211b; border:1px solid #E9C3C0}
+  .notice strong{font-weight:700}
+
+  /* results */
+  #results .interp{border-radius:var(--radius); padding:18px 20px; display:flex; align-items:center; gap:16px}
+  .interp .dot{width:13px;height:13px;border-radius:50%;flex:0 0 auto}
+  .interp .it-label{font-size:19px; font-weight:720; letter-spacing:-.01em; line-height:1.2}
+  .interp .it-en{font-size:12px; font-weight:600; opacity:.72; margin-top:2px}
+  .interp .it-slope{margin-left:auto; text-align:right}
+  .interp .it-slope .v{font:720 26px/1 var(--mono); font-variant-numeric:tabular-nums}
+  .interp .it-slope .u{font-size:10.5px; color:inherit; opacity:.7; display:block; margin-top:4px}
+  .interp.stable{background:var(--stable-bg); color:var(--stable)} .interp.stable .dot{background:var(--stable)}
+  .interp.decline{background:var(--decline-bg); color:var(--decline)} .interp.decline .dot{background:var(--decline)}
+  .interp.rapid{background:var(--rapid-bg); color:var(--rapid)} .interp.rapid .dot{background:var(--rapid)}
+
+  .metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line-2);
+    border:1px solid var(--line-2); border-radius:var(--radius-sm); overflow:hidden; margin-top:16px}
+  @media(max-width:560px){.metrics{grid-template-columns:repeat(2,1fr)}}
+  .metric{background:var(--surface); padding:13px 14px}
+  .metric .k{font-size:11px; color:var(--faint); font-weight:600}
+  .metric .v{font:680 19px/1.1 var(--mono); margin-top:5px; font-variant-numeric:tabular-nums}
+  .metric .v small{font-size:11px; color:var(--muted); font-weight:600; margin-left:3px}
+
+  .chart-wrap{margin-top:18px; border:1px solid var(--line-2); border-radius:var(--radius-sm); padding:12px 6px 4px; background:var(--surface)}
+  canvas#chart{width:100%; height:auto; display:block}
+
+  /* footer / safety */
+  .safety{margin-top:22px}
+  .safety h3{font-size:12.5px; font-weight:700; margin:0 0 10px; color:var(--ink);
+    display:flex; align-items:center; gap:7px}
+  .safety h3 svg{width:15px;height:15px;color:var(--decline)}
+  .safety ul{margin:0; padding-left:18px; color:var(--muted); font-size:12.5px}
+  .safety li{margin:3px 0}
+  .safety .lead{color:var(--ink); font-weight:600; font-size:12.5px; margin:0 0 8px}
+  .footer{margin-top:26px; padding-top:18px; border-top:1px solid var(--line);
+    color:var(--faint); font-size:11.5px; display:flex; flex-direction:column; gap:8px}
+  .footer .pv{display:flex; gap:8px; align-items:flex-start}
+  .footer svg{width:13px;height:13px;flex:0 0 auto;margin-top:2px;color:var(--accent)}
+  code.k{font-family:var(--mono); background:var(--surface-2); padding:1px 5px; border-radius:4px;
+    border:1px solid var(--line-2); font-size:.92em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <svg class="glyph" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="9" fill="var(--accent-soft)"/>
+        <path d="M7 11 L7 31 L33 31" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="11" cy="15" r="2.4" fill="var(--accent)"/>
+        <circle cx="18" cy="19" r="2.4" fill="var(--accent)"/>
+        <circle cx="25" cy="22" r="2.4" fill="var(--accent)"/>
+        <circle cx="31" cy="26" r="2.4" fill="var(--accent)"/>
+        <path d="M9 13.5 L33 27.5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.1 5.6"/>
+      </svg>
+      <div>
+        <h1>eGFR Slope Analyzer</h1>
+      </div>
+    </div>
+    <p class="sub">検査日と検査値（eGFR / Cr）から腎機能の経時的な傾き（slope）を算出します。医療従事者・研究者向けのユーティリティです。計算はすべてブラウザ内で行われます。</p>
+    <div class="ribbon"></div>
+    <span class="localbadge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+      非識別化データのみ入力
+    </span>
+  </header>
+
+  <!-- ===== STEP 1: input ===== -->
+  <section class="card" id="s-input">
+    <div class="sect-head"><span class="step">STEP 1</span><h2>解析条件と検査値</h2></div>
+    <p class="hint">対象：日本人成人（18歳以上）。小児・透析・腎移植患者、非日本人集団は対象外です。</p>
+
+    <div class="notice warn" style="margin:0 0 16px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <span><strong>非識別化データのみを入力してください。</strong>氏名・患者ID・カルテ番号などの識別情報は入力しないでください。電子カルテからの患者データの貼り付けは、所属施設の情報管理規程で禁止されている場合があります。規程の順守は利用者の責任です。</span>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label>性別 <span class="req">*</span></label>
+        <div class="seg" id="sex" role="group" aria-label="性別">
+          <button type="button" data-sex="male" aria-pressed="false">男性</button>
+          <button type="button" data-sex="female" aria-pressed="false">女性</button>
+        </div>
+      </div>
+      <div>
+        <label for="dob-y">生年月日 <span class="req">*</span></label>
+        <div class="dob-row">
+          <select id="dob-y" aria-label="生年（年）"></select>
+          <select id="dob-m" aria-label="月"></select>
+          <select id="dob-d" aria-label="日"></select>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:18px">
+      <div class="ta-row">
+        <label for="labtext" style="margin:0">検査値テキスト <span class="req">*</span></label>
+        <button type="button" class="linklike" id="sampleBtn">サンプルを入力</button>
+      </div>
+      <textarea id="labtext" spellcheck="false" placeholder="検査日ごとに、日付と eGFR または Cr を貼り付け&#10;&#10;2025/01/15&#10;eGFR 56.3&#10;&#10;2025/04/20&#10;Cr 1.15&#10;…"></textarea>
+      <p class="hint" style="margin:8px 0 0">日付と同じ行・直後の行にある eGFR / Cr を拾います。対応ラベル — eGFR系：<code class="k">eGFR / EGFR / e-GFR / eGFRcre</code>　Cr系：<code class="k">Cr / CRE / Cre / CREA / Creatinine</code>。<strong>eGFRが記載されている場合はその値を優先採用し、Crからの再計算は行いません。</strong>抽出結果は次の画面で必ず確認・修正できます。</p>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="extractBtn">検査値を抽出</button>
+    </div>
+    <div id="inputError"></div>
+  </section>
+
+  <!-- ===== STEP 2: confirm ===== -->
+  <section class="card hidden" id="s-confirm">
+    <div class="sect-head"><span class="step">STEP 2</span><h2>抽出結果の確認</h2></div>
+    <p class="hint">解析の前に必ず内容を確認してください。日付・eGFR値の編集、行の削除ができます。確認後に解析が実行されます。</p>
+
+    <div class="tbl-scroll">
+      <table id="extractTable">
+        <thead><tr><th>日付</th><th style="text-align:right">eGFR</th><th>Cr</th><th>ソース</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="mixWarn" class="notice warn hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <span><strong>報告値と計算値が混在しています。</strong>検査方法や推算式の違いが解釈に影響する可能性があります。</span>
+    </div>
+    <div id="eligNote"></div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="analyzeBtn">この内容で解析する</button>
+      <button type="button" class="btn btn-ghost" id="backBtn">入力に戻る</button>
+    </div>
+  </section>
+
+  <!-- ===== STEP 3: results ===== -->
+  <section class="card hidden" id="results">
+    <div class="sect-head"><span class="step">STEP 3</span><h2>解析結果</h2></div>
+
+    <div class="interp" id="interp">
+      <span class="dot"></span>
+      <div>
+        <div class="it-label" id="interpLabel"></div>
+        <div class="it-en" id="interpEn"></div>
+      </div>
+      <div class="it-slope">
+        <span class="v" id="slopeVal"></span>
+        <span class="u">mL/min/1.73m² / 年</span>
+      </div>
+    </div>
+
+    <div class="metrics" id="metrics"></div>
+
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" id="pngBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        PNG画像を保存
+      </button>
+    </div>
+  </section>
+
+  <!-- ===== Safety ===== -->
+  <section class="card safety" id="safety">
+    <h3>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      医学的な注意事項
+    </h3>
+    <p class="lead">本ツールは参考情報を提供するものです。eGFR slope は以下の要因の影響を受けることがあります。</p>
+    <ul>
+      <li>急性腎障害（AKI）</li>
+      <li>脱水</li>
+      <li>心不全の増悪</li>
+      <li>薬剤の変更</li>
+      <li>SGLT2阻害薬の開始</li>
+      <li>検査値のばらつき（測定変動）</li>
+    </ul>
+    <p class="lead" style="margin-top:12px">診断・治療の判断を本ツールの結果のみに基づいて行わないでください。臨床的判断が必要です。</p>
+  </section>
+
+  <div class="footer">
+    <div class="pv">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span>計算はブラウザ内（ローカル）で行われ、入力内容の外部送信・サーバ保存・解析計測への送出はありません。ただしこれは入力すべきデータの判断を代替するものではなく、入力は非識別化されたものに限り、所属施設の情報管理規程に従ってください。</span>
+    </div>
+    <div>eGFR推算式：日本腎臓学会 成人向け推算式（酵素法 Cr）。 本ツールは静的サイトとして動作します。</div>
+  </div>
+
+</div>
+
+<script>
+/* ===================== core logic ===================== */
+const ERA={'令和':2018,'R':2018,'r':2018,'平成':1988,'H':1988,'h':1988,'昭和':1925,'S':1925,'s':1925};
+function buildDate(y,m,d){
+  if(!y||!m||!d)return null;
+  if(m<1||m>12||d<1||d>31)return null;
+  const dt=new Date(y,m-1,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==m-1||dt.getDate()!==d)return null;
+  return dt;
+}
+function parseDate(raw){
+  if(!raw)return null;
+  let s=String(raw).trim(), m;
+  m=s.match(/(令和|平成|昭和|[RrHhSs])\s*(元|\d{1,2})\s*[年.\/\-]\s*(\d{1,2})\s*[月.\/\-]\s*(\d{1,2})/);
+  if(m){const ey=(m[2]==='元')?1:parseInt(m[2],10);return buildDate(ERA[m[1]]+ey,+m[3],+m[4]);}
+  m=s.match(/(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/);
+  if(m)return buildDate(+m[1],+m[2],+m[3]);
+  m=s.match(/(\d{4})[.\/\-](\d{1,2})[.\/\-](\d{1,2})/);
+  if(m)return buildDate(+m[1],+m[2],+m[3]);
+  return null;
+}
+function lineHasDate(l){
+  return /(?:令和|平成|昭和|[RrHhSs]\s*\d)\s*(?:元|\d{1,2})\s*[年.\/\-]\s*\d{1,2}\s*[月.\/\-]\s*\d{1,2}/.test(l)
+      ||/\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}/.test(l)
+      ||/\d{4}[.\/\-]\d{1,2}[.\/\-]\d{1,2}/.test(l);
+}
+const EGFR_RE=/e-?gfr(?:cre)?\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/i;
+const CR_RE=/\b(?:creatinine|crea|cre|cr)\b\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/i;
+function extractEgfr(l){const m=l.match(EGFR_RE);return m?parseFloat(m[1]):null;}
+function extractCr(l){const m=l.replace(EGFR_RE,' ').match(CR_RE);return m?parseFloat(m[1]):null;}
+function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fmtDate(d){return dateKey(d);}
+function parseLabText(text){
+  const lines=String(text||'').split(/\r?\n/);
+  const map=new Map(); let cur=null;
+  for(const raw of lines){
+    const line=raw.trim(); if(!line)continue;
+    if(lineHasDate(line)){const d=parseDate(line);
+      if(d){const k=dateKey(d); if(!map.has(k))map.set(k,{date:d,dateStr:fmtDate(d),egfr:null,cr:null}); cur=map.get(k);}}
+    const eg=extractEgfr(line), cr=extractCr(line);
+    if((eg!==null||cr!==null)&&cur){
+      if(eg!==null&&cur.egfr===null)cur.egfr=eg;
+      if(cr!==null&&cur.cr===null)cur.cr=cr;
+    }
+  }
+  return Array.from(map.values()).sort((a,b)=>a.date-b.date);
+}
+function ageAt(dob,m){let a=m.getFullYear()-dob.getFullYear();
+  const md=m.getMonth()-dob.getMonth();
+  if(md<0||(md===0&&m.getDate()<dob.getDate()))a--; return a;}
+function calcEgfr(cr,age,sex){let v=194*Math.pow(cr,-1.094)*Math.pow(age,-0.287); if(sex==='female')v*=0.739; return v;}
+function validateCr(c){return c>=0.1&&c<=20.0;}
+function validateEgfr(e){return e>=1&&e<=200;}
+function buildMeasurements(raws,p){
+  const out=[];
+  for(const r of raws){
+    const age=ageAt(p.dob,r.date);
+    let egfr=null,source=null,note=null;
+    if(r.egfr!==null){egfr=r.egfr;source='reported';}
+    else if(r.cr!==null){
+      if(!validateCr(r.cr))note='Cr値が範囲外';
+      else if(age<18)note='18歳未満';
+      else{egfr=calcEgfr(r.cr,age,p.sex);source='calculated';}
+    } else note='値なし';
+    if(egfr!==null&&!validateEgfr(egfr)){note='eGFRが範囲外';}
+    const valid=egfr!==null&&validateEgfr(egfr);
+    out.push({date:r.date,dateStr:r.dateStr,age,cr:r.cr,
+      egfr:egfr===null?null:Math.round(egfr*10)/10,source,note,valid});
+  }
+  return out;
+}
+function linearRegression(pts){
+  const n=pts.length; const sx=pts.reduce((s,p)=>s+p.x,0), sy=pts.reduce((s,p)=>s+p.y,0);
+  const mx=sx/n,my=sy/n; let sxx=0,sxy=0,syy=0;
+  for(const p of pts){sxx+=(p.x-mx)**2;sxy+=(p.x-mx)*(p.y-my);syy+=(p.y-my)**2;}
+  const slope=sxy/sxx,intercept=my-slope*mx,r2=(syy===0)?1:(sxy*sxy)/(sxx*syy);
+  return{slope,intercept,r2};
+}
+function interpret(s){
+  if(s>-3)return{key:'stable',label:'安定',en:'Stable'};
+  if(s>-5)return{key:'decline',label:'腎機能低下',en:'Renal function decline'};
+  return{key:'rapid',label:'急速な腎機能低下',en:'Rapid renal function decline'};
+}
+const DAY=86400000;
+
+/* ===================== app state ===================== */
+const $=s=>document.querySelector(s);
+let state={sex:null, dob:null, measurements:[], regression:null};
+
+/* ---- populate 生年月日 selects ---- */
+(function initDob(){
+  const ys=$('#dob-y'), ms=$('#dob-m'), ds=$('#dob-d');
+  const thisYear=new Date().getFullYear();
+  ys.innerHTML='<option value="">年</option>';
+  for(let y=thisYear; y>=1900; y--) ys.add(new Option(y+'年', y));
+  ms.innerHTML='<option value="">月</option>';
+  for(let m=1; m<=12; m++) ms.add(new Option(m+'月', m));
+  ds.innerHTML='<option value="">日</option>';
+  for(let d=1; d<=31; d++) ds.add(new Option(d+'日', d));
+  [ys,ms,ds].forEach(el=>el.addEventListener('change', syncDob));
+})();
+function getDob(){
+  const y=+$('#dob-y').value, m=+$('#dob-m').value, d=+$('#dob-d').value;
+  if(!y||!m||!d) return null;
+  return buildDate(y,m,d); // null if invalid combo (e.g. 2/30)
+}
+function setDob(y,m,d){
+  $('#dob-y').value=y; $('#dob-m').value=m; $('#dob-d').value=d; syncDob();
+}
+function syncDob(){ state.dob=getDob(); }
+
+/* ---- step 1 ---- */
+$('#sex').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-sex]'); if(!b)return;
+  state.sex=b.dataset.sex;
+  $('#sex').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+});
+$('#sampleBtn').addEventListener('click',()=>{
+  $('#labtext').value=
+`2024/02/10
+eGFR 60.4
+
+2024/06/18
+eGFR 58.9
+Cr 1.05
+
+2024/11/05
+Cr 1.06
+
+2025/03/22
+eGFR 55.8
+
+2025/09/14
+eGFR 53.6`;
+  if(!state.sex){state.sex='male';$('#sex').querySelector('[data-sex=male]').setAttribute('aria-pressed','true');}
+  if(!getDob()) setDob(1958,4,12);
+});
+
+function showError(el,msg){
+  el.innerHTML = msg ? `<div class="notice bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>${msg}</span></div>` : '';
+}
+
+$('#extractBtn').addEventListener('click',()=>{
+  showError($('#inputError'),'');
+  if(!state.sex){showError($('#inputError'),'性別を選択してください。');return;}
+  const dob=getDob();
+  if($('#dob-y').value && $('#dob-m').value && $('#dob-d').value && !dob){
+    showError($('#inputError'),'生年月日が正しくありません（存在しない日付です）。');return;
+  }
+  if(!dob){showError($('#inputError'),'生年月日を選択してください。');return;}
+  if(dob > new Date()){showError($('#inputError'),'生年月日が未来の日付になっています。');return;}
+  state.dob=dob;
+  const txt=$('#labtext').value;
+  if(!txt.trim()){showError($('#inputError'),'検査値テキストを入力してください。');return;}
+  const raws=parseLabText(txt);
+  if(raws.length===0){showError($('#inputError'),'日付付きの検査値を抽出できませんでした。日付（例：2025/01/15）と eGFR または Cr の値が含まれているか確認してください。');return;}
+  state.measurements=buildMeasurements(raws,{sex:state.sex,dob:state.dob});
+  renderTable();
+  $('#s-confirm').classList.remove('hidden');
+  $('#results').classList.add('hidden');
+  $('#s-confirm').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+/* ---- step 2: editable table ---- */
+function recompute(){
+  // re-derive source/validity for edited rows from current dateStr + egfr
+  state.measurements.forEach(m=>{
+    const d=parseDate(m.dateStr);
+    m.dateValid=!!d;
+    if(d){m.date=d; m.age=ageAt(state.dob,d);}
+    if(m.egfr===null||isNaN(m.egfr)){m.valid=false;m.note='値なし';}
+    else if(!validateEgfr(m.egfr)){m.valid=false;m.note='eGFRが範囲外';}
+    else if(!d){m.valid=false;m.note='日付が不正';}
+    else {m.valid=true;m.note=null;}
+  });
+}
+function renderTable(){
+  recompute();
+  const tb=$('#extractTable tbody'); tb.innerHTML='';
+  state.measurements.forEach((m,i)=>{
+    const tr=document.createElement('tr');
+    if(!m.valid)tr.className='invalid';
+    const srcCls=m.source==='reported'?'reported':m.source==='edited'?'edited':'calculated';
+    const srcTxt=m.source==='reported'?'報告eGFR':m.source==='edited'?'手動編集':m.source==='calculated'?'Crから計算':'—';
+    tr.innerHTML=
+      `<td><input class="cell-date" value="${m.dateStr}" data-i="${i}" data-f="date" inputmode="numeric"></td>`+
+      `<td style="text-align:right"><input class="num cell-egfr" value="${m.egfr??''}" data-i="${i}" data-f="egfr" inputmode="decimal"></td>`+
+      `<td class="cr-cell">${m.cr??'—'}</td>`+
+      `<td><span class="src ${srcCls}">${srcTxt}</span>${m.note?`<div class="rownote">${m.note}</div>`:''}</td>`+
+      `<td style="text-align:right"><button class="delbtn" data-del="${i}" aria-label="削除"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td>`;
+    tb.appendChild(tr);
+  });
+  // mixed source
+  const hasRep=state.measurements.some(m=>m.source==='reported');
+  const hasCalc=state.measurements.some(m=>m.source==='calculated');
+  $('#mixWarn').classList.toggle('hidden',!(hasRep&&hasCalc));
+  checkEligibility();
+}
+$('#extractTable').addEventListener('input',e=>{
+  const inp=e.target.closest('input[data-i]'); if(!inp)return;
+  const i=+inp.dataset.i, f=inp.dataset.f;
+  if(f==='date'){state.measurements[i].dateStr=inp.value.trim();}
+  if(f==='egfr'){
+    const v=parseFloat(inp.value);
+    state.measurements[i].egfr=isNaN(v)?null:v;
+    state.measurements[i].source='edited';
+  }
+  // light recompute without full re-render (avoid losing focus); update eligibility + warnings
+  recompute();
+  refreshRowStates();
+});
+function refreshRowStates(){
+  const rows=$('#extractTable tbody').querySelectorAll('tr');
+  state.measurements.forEach((m,i)=>{
+    const tr=rows[i]; if(!tr)return;
+    tr.classList.toggle('invalid',!m.valid);
+    const noteEl=tr.querySelector('.rownote');
+    const srcSpan=tr.querySelector('.src');
+    if(srcSpan && m.source==='edited'){srcSpan.className='src edited';srcSpan.textContent='手動編集';}
+    if(m.note){if(noteEl)noteEl.textContent=m.note; else {const d=document.createElement('div');d.className='rownote';d.textContent=m.note;srcSpan.after(d);}}
+    else if(noteEl)noteEl.remove();
+  });
+  const hasRep=state.measurements.some(m=>m.source==='reported');
+  const hasCalc=state.measurements.some(m=>m.source==='calculated');
+  $('#mixWarn').classList.toggle('hidden',!(hasRep&&hasCalc));
+  checkEligibility();
+}
+$('#extractTable').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-del]'); if(!b)return;
+  state.measurements.splice(+b.dataset.del,1);
+  renderTable();
+});
+
+function validMeasurements(){return state.measurements.filter(m=>m.valid).slice().sort((a,b)=>a.date-b.date);}
+function checkEligibility(){
+  const v=validMeasurements();
+  const n=v.length;
+  let span=0;
+  if(n>=2)span=Math.round((v[n-1].date-v[0].date)/DAY);
+  // duplicate dates among valid rows
+  const keys=v.map(m=>dateKey(m.date));
+  const dup=keys.length!==new Set(keys).size;
+  const eligible=n>=5 && span>=365 && !dup;
+  let msg='';
+  if(dup) msg='重複した日付があります。重複を解消してください。';
+  else if(n<5||span<365) msg='傾きの算出には、1年以上にわたる5件以上の有効な測定が必要です。'+`（現在：有効 ${n} 件 / 期間 ${span} 日）`;
+  $('#eligNote').innerHTML = msg
+    ? `<div class="notice bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg><span>${msg}</span></div>`
+    : '';
+  $('#analyzeBtn').disabled=!eligible;
+  return eligible;
+}
+$('#backBtn').addEventListener('click',()=>{$('#s-input').scrollIntoView({behavior:'smooth',block:'start'});});
+
+/* ---- step 3: analyze ---- */
+$('#analyzeBtn').addEventListener('click',()=>{
+  if(!checkEligibility())return;
+  const v=validMeasurements();
+  const t0=v[0].date;
+  const pts=v.map(m=>({x:(m.date-t0)/(365.25*DAY), y:m.egfr, date:m.date}));
+  const reg=linearRegression(pts);
+  state.regression=reg; state.points=pts; state.validList=v;
+  renderResults(reg,v,pts);
+  $('#results').classList.remove('hidden');
+  $('#results').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+function fmtNum(x,d=1){return (Math.round(x*10**d)/10**d).toFixed(d);}
+function renderResults(reg,v,pts){
+  const it=interpret(reg.slope);
+  const ip=$('#interp'); ip.className='interp '+it.key;
+  $('#interpLabel').textContent=it.label;
+  $('#interpEn').textContent=it.en;
+  $('#slopeVal').textContent=(reg.slope>=0?'+':'')+fmtNum(reg.slope,2);
+
+  const n=v.length;
+  const spanDays=Math.round((v[n-1].date-v[0].date)/DAY);
+  const spanY=(spanDays/365.25);
+  const baseline=v[0].egfr, latest=v[n-1].egfr;
+  const cards=[
+    ['最新 eGFR', fmtNum(latest,1), 'mL/min/1.73m²'],
+    ['ベースライン eGFR', fmtNum(baseline,1), 'mL/min/1.73m²'],
+    ['eGFR slope', (reg.slope>=0?'+':'')+fmtNum(reg.slope,2), '/年'],
+    ['R²', fmtNum(reg.r2,3), ''],
+    ['測定数', String(n), '件'],
+    ['観察期間', fmtNum(spanY,1), `年 (${spanDays}日)`],
+  ];
+  $('#metrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v">${c[1]}${c[2]?`<small>${c[2]}</small>`:''}</div></div>`).join('');
+
+  drawChart($('#chart'), pts, reg, v);
+}
+
+/* ---- canvas chart ---- */
+function niceBounds(min,max){
+  if(min===max){min-=5;max+=5;}
+  const pad=(max-min)*0.12; let lo=min-pad, hi=max+pad;
+  lo=Math.floor(lo/5)*5; hi=Math.ceil(hi/5)*5;
+  if(lo<0)lo=0;
+  return [lo,hi];
+}
+function drawChart(canvas,pts,reg,v){
+  const css=getComputedStyle(document.documentElement);
+  const COL={ink:css.getPropertyValue('--ink').trim(),muted:css.getPropertyValue('--muted').trim(),
+    line:css.getPropertyValue('--line-2').trim(),accent:css.getPropertyValue('--accent').trim(),
+    accentInk:css.getPropertyValue('--accent-ink').trim(),soft:css.getPropertyValue('--accent-soft').trim(),
+    faint:css.getPropertyValue('--faint').trim()};
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.clientWidth||680, H=Math.round(W*0.56);
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.font='11px -apple-system,system-ui,sans-serif';
+
+  const mL=46,mR=14,mT=14,mB=34;
+  const plotW=W-mL-mR, plotH=H-mT-mB;
+  const t0=v[0].date, t1=v[v.length-1].date;
+  const xMinY=0, xMaxY=(t1-t0)/(365.25*DAY) || 1;
+  const ys=v.map(m=>m.egfr);
+  const [yLo,yHi]=niceBounds(Math.min(...ys),Math.max(...ys));
+  const X=yr=>mL+(yr-xMinY)/(xMaxY-xMinY||1)*plotW;
+  const Y=val=>mT+(yHi-val)/(yHi-yLo)*plotH;
+
+  // y grid + labels
+  ctx.strokeStyle=COL.line; ctx.fillStyle=COL.faint; ctx.lineWidth=1;
+  const steps=5;
+  for(let i=0;i<=steps;i++){
+    const val=yLo+(yHi-yLo)*i/steps; const y=Y(val);
+    ctx.beginPath();ctx.moveTo(mL,y);ctx.lineTo(W-mR,y);ctx.stroke();
+    ctx.textAlign='right';ctx.textBaseline='middle';
+    ctx.fillText(Math.round(val),mL-8,y);
+  }
+  // x ticks: each measurement year-position with date labels (thin)
+  ctx.textAlign='center';ctx.textBaseline='top';
+  v.forEach((m,i)=>{
+    const yr=(m.date-t0)/(365.25*DAY); const x=X(yr);
+    if(i===0||i===v.length-1||v.length<=6){
+      const d=m.date; const lbl=(d.getMonth()+1)+'/'+d.getFullYear().toString().slice(2);
+      ctx.fillStyle=COL.faint; ctx.fillText(lbl,x,H-mB+8);
+    }
+  });
+  // axis title
+  ctx.save();ctx.translate(13,mT+plotH/2);ctx.rotate(-Math.PI/2);
+  ctx.fillStyle=COL.muted;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText('eGFR',0,0);ctx.restore();
+
+  // regression area + line
+  const xa=xMinY, xb=xMaxY;
+  const ya=reg.intercept+reg.slope*xa, yb=reg.intercept+reg.slope*xb;
+  ctx.beginPath();
+  ctx.moveTo(X(xa),Y(ya));ctx.lineTo(X(xb),Y(yb));
+  ctx.lineTo(X(xb),Y(yLo));ctx.lineTo(X(xa),Y(yLo));ctx.closePath();
+  ctx.fillStyle=COL.soft; ctx.globalAlpha=.55; ctx.fill(); ctx.globalAlpha=1;
+  ctx.beginPath();ctx.moveTo(X(xa),Y(ya));ctx.lineTo(X(xb),Y(yb));
+  ctx.strokeStyle=COL.accent;ctx.lineWidth=2.4;ctx.stroke();
+
+  // data points
+  pts.forEach(p=>{
+    const x=X(p.x), y=Y(p.y);
+    ctx.beginPath();ctx.arc(x,y,4.5,0,7);ctx.fillStyle='#fff';ctx.fill();
+    ctx.lineWidth=2.2;ctx.strokeStyle=COL.accentInk;ctx.stroke();
+  });
+}
+window.addEventListener('resize',()=>{ if(state.regression && !$('#results').classList.contains('hidden')) drawChart($('#chart'),state.points,state.regression,state.validList); });
+
+/* ---- PNG export (graph + summary + interpretation) ---- */
+$('#pngBtn').addEventListener('click',()=>{
+  const reg=state.regression, v=state.validList, pts=state.points; if(!reg)return;
+  const css=getComputedStyle(document.documentElement);
+  const dpr=2, W=720, pad=28;
+  const it=interpret(reg.slope);
+  const interpColors={stable:['#157A3B','#E9F7EF'],decline:['#A8580A','#FBF1E1'],rapid:['#BC2A22','#FAEAE9']}[it.key];
+  const ex=document.createElement('canvas');
+  const H=560;
+  ex.width=W*dpr; ex.height=H*dpr;
+  const ctx=ex.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+
+  // title
+  ctx.fillStyle='#13252D'; ctx.font='700 18px -apple-system,system-ui,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  ctx.fillText('eGFR Slope Analyzer',pad,38);
+  ctx.fillStyle='#5E727B'; ctx.font='11px -apple-system,system-ui,sans-serif';
+  ctx.fillText('生成日 '+fmtDate(new Date()),pad,56);
+
+  // interpretation banner
+  const by=72,bh=58;
+  ctx.fillStyle=interpColors[1]; roundRect(ctx,pad,by,W-2*pad,bh,10); ctx.fill();
+  ctx.fillStyle=interpColors[0];
+  ctx.beginPath();ctx.arc(pad+22,by+bh/2,6,0,7);ctx.fill();
+  ctx.font='700 18px -apple-system,system-ui,sans-serif';
+  ctx.fillText(it.label,pad+38,by+26);
+  ctx.font='600 11px -apple-system,system-ui,sans-serif';
+  ctx.globalAlpha=.75;ctx.fillText(it.en,pad+38,by+44);ctx.globalAlpha=1;
+  ctx.textAlign='right';
+  ctx.font='700 24px ui-monospace,monospace';
+  ctx.fillText((reg.slope>=0?'+':'')+fmtNum(reg.slope,2),W-pad-12,by+28);
+  ctx.font='600 10px -apple-system,system-ui,sans-serif';ctx.globalAlpha=.7;
+  ctx.fillText('mL/min/1.73m² / 年',W-pad-12,by+44);ctx.globalAlpha=1;
+  ctx.textAlign='left';
+
+  // chart
+  const cTop=by+bh+18, cH=250, cBot=cTop+cH;
+  drawExportChart(ctx,pad,cTop,W-2*pad,cH,pts,reg,v);
+
+  // summary row
+  const n=v.length, spanDays=Math.round((v[n-1].date-v[0].date)/86400000);
+  const summary=[
+    ['最新 eGFR',fmtNum(v[n-1].egfr,1)],
+    ['ベースライン',fmtNum(v[0].egfr,1)],
+    ['R²',fmtNum(reg.r2,3)],
+    ['測定数',n+'件'],
+    ['期間',fmtNum(spanDays/365.25,1)+'年'],
+  ];
+  const sy=cBot+30, cw=(W-2*pad)/summary.length;
+  summary.forEach((s,i)=>{
+    const x=pad+cw*i;
+    ctx.fillStyle='#8497A0';ctx.font='600 10px -apple-system,system-ui,sans-serif';
+    ctx.fillText(s[0],x,sy);
+    ctx.fillStyle='#13252D';ctx.font='700 17px ui-monospace,monospace';
+    ctx.fillText(s[1],x,sy+22);
+  });
+  // disclaimer
+  ctx.fillStyle='#8497A0';ctx.font='10px -apple-system,system-ui,sans-serif';
+  ctx.fillText('参考情報。診断・治療の判断を本結果のみに基づいて行わないでください。日本腎臓学会 成人推算式。',pad,H-16);
+
+  const a=document.createElement('a');
+  a.download='egfr_slope_'+fmtDate(new Date())+'.png';
+  a.href=ex.toDataURL('image/png'); a.click();
+});
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawExportChart(ctx,ox,oy,w,h,pts,reg,v){
+  ctx.save();
+  const mL=44,mR=10,mT=8,mB=26;
+  const pW=w-mL-mR,pH=h-mT-mB, X0=ox+mL, Y0=oy+mT;
+  const t0=v[0].date,t1=v[v.length-1].date;
+  const xMax=(t1-t0)/(365.25*86400000)||1;
+  const ys=v.map(m=>m.egfr);
+  const [yLo,yHi]=niceBounds(Math.min(...ys),Math.max(...ys));
+  const X=yr=>X0+yr/(xMax||1)*pW, Y=val=>Y0+(yHi-val)/(yHi-yLo)*pH;
+  ctx.strokeStyle='#E7EEF0';ctx.fillStyle='#8497A0';ctx.lineWidth=1;
+  ctx.font='10px -apple-system,system-ui,sans-serif';
+  for(let i=0;i<=5;i++){const val=yLo+(yHi-yLo)*i/5,y=Y(val);
+    ctx.beginPath();ctx.moveTo(X0,y);ctx.lineTo(X0+pW,y);ctx.stroke();
+    ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText(Math.round(val),X0-7,y);}
+  ctx.textAlign='center';ctx.textBaseline='top';
+  v.forEach((m,i)=>{if(i===0||i===v.length-1||v.length<=6){
+    const yr=(m.date-t0)/(365.25*86400000),x=X(yr);
+    ctx.fillStyle='#8497A0';ctx.fillText((m.date.getMonth()+1)+'/'+m.date.getFullYear().toString().slice(2),x,oy+h-mB+6);}});
+  // reg area+line
+  const ya=reg.intercept,yb=reg.intercept+reg.slope*xMax;
+  ctx.fillStyle='#E2F1F2';ctx.globalAlpha=.6;
+  ctx.beginPath();ctx.moveTo(X(0),Y(ya));ctx.lineTo(X(xMax),Y(yb));ctx.lineTo(X(xMax),Y(yLo));ctx.lineTo(X(0),Y(yLo));ctx.closePath();ctx.fill();ctx.globalAlpha=1;
+  ctx.beginPath();ctx.moveTo(X(0),Y(ya));ctx.lineTo(X(xMax),Y(yb));ctx.strokeStyle='#0E7C86';ctx.lineWidth=2.2;ctx.stroke();
+  pts.forEach(p=>{const x=X(p.x),y=Y(p.y);
+    ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fillStyle='#fff';ctx.fill();
+    ctx.lineWidth=2;ctx.strokeStyle='#0A5A62';ctx.stroke();});
+  ctx.restore();
+}
+</script>
+</body>
+</html>
