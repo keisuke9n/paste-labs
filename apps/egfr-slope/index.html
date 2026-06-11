@@ -370,13 +370,24 @@ function splitCells(line){
   if(line.indexOf('","')>=0||/^\s*"/.test(line))return parseCsvLine(line);
   return line.trim().split(/[ \u3000\t]{2,}/).map(stripQuote);
 }
-function isNumericValue(s){s=String(s).trim();if(!s)return false;if(/[:：]/.test(s))return false;return /^-?\d+(?:\.\d+)?$/.test(s);}
+// Parse a numeric value that may carry a lab flag (e.g. "1.45 H", "0.01 L", "1.2H", "0.8*", "5↑").
+// Returns the number, or null if the cell isn't a value (時刻/コメント/中止/日付 等).
+function parseNumeric(s){
+  s=String(s).trim(); if(!s)return null;
+  if(/[:：]/.test(s))return null;                       // time (00:00)
+  const m=s.match(/^[+-]?\d+(?:\.\d+)?/); if(!m)return null;
+  const rest=s.slice(m[0].length).trim();
+  // allow nothing, or a known high/low / abnormal flag marker
+  if(rest!=='' && !/^(?:[HLＨＬ]{1,2}|[!！*＊↑↓⇑⇓▲▼△▽]+|[HLＨＬ]{1,2}[!！*＊]?)$/i.test(rest))return null;
+  return parseFloat(m[0]);
+}
+function isNumericValue(s){return parseNumeric(s)!==null;}
 
 /* ---- type guess ---- */
 function guessType(label,values){
   if(/e-?gfr/i.test(label))return'egfr';
   if(/cre|creat|ｸﾚｱﾁﾆﾝ|クレアチニン|\bcr\b/i.test(label))return'cr';
-  const nums=values.filter(isNumericValue).map(parseFloat).sort((a,b)=>a-b);
+  const nums=values.map(parseNumeric).filter(v=>v!=null).sort((a,b)=>a-b);
   if(!nums.length)return'cr';
   return nums[Math.floor(nums.length/2)]<20?'cr':'egfr';
 }
@@ -439,8 +450,9 @@ function buildFromSeries(dates,series,type,patient){
   dates.forEach((slot,i)=>{
     if(!slot)return;                       // unparseable date column -> skip (keeps alignment)
     const raw=series.values[i];
-    if(!isNumericValue(raw))return;        // 検査中止 / blank -> skip this column only
-    const num=parseFloat(raw), age=ageAt(patient.dob,slot.date);
+    const num=parseNumeric(raw);
+    if(num===null)return;        // 検査中止 / blank / 時刻 -> skip this column only (keeps alignment)
+    const age=ageAt(patient.dob,slot.date);
     let egfr=null,source=null,note=null,cr=null;
     if(type==='egfr'){egfr=num;source='reported';if(!validateEgfr(egfr))note='eGFRが範囲外';}
     else{cr=num;
